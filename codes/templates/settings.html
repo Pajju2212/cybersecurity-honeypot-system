@@ -1,0 +1,99 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - The Honeypot{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<section id="main">
+    <div class="container">
+        <div class="settings-container">
+            <h2>Alert Settings</h2>
+            
+            <div class="setting-item">
+                <label for="alertToggle" class="toggle-label">Enable Email Alerts</label>
+                <label class="switch">
+                    <input type="checkbox" id="alertToggle">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
+            <div class="setting-item">
+                <label for="emailInput">Notification Email</label>
+                <input type="email" id="emailInput" placeholder="your_email@example.com">
+            </div>
+
+            <div class="setting-item">
+                <label for="thresholdCount">Alert Condition</label>
+                <div class="threshold-inputs">
+                    <span>If more than</span>
+                    <input type="number" id="thresholdCount" value="20" min="1">
+                    <span>attacks occur within</span>
+                    <input type="number" id="thresholdMinutes" value="5" min="1">
+                    <span>minutes.</span>
+                </div>
+            </div>
+
+            <button id="saveBtn">Save Settings</button>
+            <p id="saveStatus" style="text-align: center; margin-top: 15px; color: #00ff95;"></p>
+        </div>
+        
+        <div id="about" style="margin-top: 40px;">
+            <h2>About Athena</h2>
+            <p>Hi! I am Athena, a robust cybersecurity tool designed to monitor and analyze malicious activities in real-time. Our dashboard provides comprehensive insights into attempted attacks, allowing security professionals to detect, analyze, and respond to threats effectively.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggle = document.getElementById('alertToggle');
+        const emailInput = document.getElementById('emailInput');
+        const countInput = document.getElementById('thresholdCount');
+        const minutesInput = document.getElementById('thresholdMinutes');
+        const saveBtn = document.getElementById('saveBtn');
+        const saveStatus = document.getElementById('saveStatus');
+
+        // 1. Load current settings when the page opens
+        async function loadSettings() {
+            const response = await fetch('/get-alert-settings');
+            const settings = await response.json();
+
+            toggle.checked = settings.is_enabled;
+            emailInput.value = settings.recipient_email;
+            countInput.value = settings.threshold_count;
+            minutesInput.value = settings.threshold_minutes;
+        }
+
+        // 2. Save new settings when the button is clicked
+        async function saveSettings() {
+            const settingsToSave = {
+                is_enabled: toggle.checked,
+                recipient_email: emailInput.value,
+                threshold_count: countInput.value,
+                threshold_minutes: minutesInput.value
+            };
+
+            saveStatus.textContent = 'Saving...';
+            const response = await fetch('/save-alert-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settingsToSave)
+            });
+
+            if (response.ok) {
+                saveStatus.textContent = 'Settings Saved Successfully!';
+            } else {
+                saveStatus.textContent = 'Error: Could not save settings.';
+            }
+
+            // Make the message disappear after a few seconds
+            setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+        }
+
+        saveBtn.addEventListener('click', saveSettings);
+        loadSettings(); // Load settings on page load
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+
+{% block title %}Home - The Honeypot{% endblock %}
+{% block page_title %}THE HONEYPOT{% endblock %}
+
+{% block content %}
+<section id="main">
+    <div class="container">
+        <h2>Hi! Welcome to The Cybersecurity Honeypot.</h2>
+        <h3>Recent Activity</h3>
+        <div class="activity-log">
+            {% for activity in recent_activity | reverse %}
+                <div class="activity-item">
+                    <p>{{ activity.timestamp }} - IP: {{ activity.ip_address }} - Type: {{ activity.attack_type }}</p>
+                </div>
+            {% endfor %}
+        </div>
+        <div id="geolocate-form" style="margin-top: 20px;">
+            <input type="text" id="ip-address" placeholder="Enter IP Address">
+            <button onclick="geolocateIP()">Geolocate</button>
+        </div>
+        <div id="geolocation-result" style="margin-top: 20px;"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script type="text/javascript">
+        var socket = io();
+        
+        socket.on('new_attack', function(attack) {
+            var activityLog = document.querySelector('.activity-log');
+            
+            var activityItem = document.createElement('div');
+            activityItem.classList.add('activity-item', 'new-attack');
+            activityItem.innerHTML = `<p>${attack.timestamp} - IP: ${attack.ip_address} - Type: ${attack.attack_type}</p>`;
+            
+            activityLog.prepend(activityItem);
+            
+            // Remove old logs to keep the list clean
+            if (activityLog.children.length > 10) {
+                activityLog.lastChild.remove();
+            }
+        });
+    </script>
+{% endblock %}

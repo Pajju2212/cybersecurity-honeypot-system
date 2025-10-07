@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block title %}Logs - The Honeypot{% endblock %}
+{% block page_title %}Attack Logs{% endblock %}
+
+{% block content %}
+<section id="main">
+    <div class="container">
+        <button onclick="window.location.href='/download_logs'" class="download-btn">Download Logs as PDF</button>
+        
+        <div class="scrollable-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>IP Address</th>
+                        <th>Type of Attack</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in attack_logs %}
+                    <tr>
+                        <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ log.ip_address }}</td>
+                        <td>{{ log.attack_type }}</td>
+                        <td>{{ log.details }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
