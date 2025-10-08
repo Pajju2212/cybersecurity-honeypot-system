@@ -34,13 +34,12 @@ header .container {
     margin: 0 auto;
 }
 
-/* --- This is for the main "Athena The Honeypot" heading --- */
 header h1 {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 2.5em; /* Larger font size */
-    font-weight: 700; /* Bold */
-    color: #00ff95; /* Bright, glowing green */
-    text-shadow: 0 0 5px #00ff95, 0 0 10px #00ff95; /* Glow effect */
+    font-size: 2.5em;
+    font-weight: 700;
+    color: #00ff95;
+    text-shadow: 0 0 5px #00ff95, 0 0 10px #00ff95;
     margin: 0;
 }
 
@@ -77,7 +76,7 @@ section#main .container {
     max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
-    background-color: rgba(10, 25, 41, 0.85); /* Dark, semi-transparent background */
+    background-color: rgba(10, 25, 41, 0.85);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
     border: 1px solid #00ff95;
@@ -104,6 +103,22 @@ section#main h2, section#main h3 {
 
 .activity-item p {
     margin: 0 0 5px 0;
+}
+
+/* --- FIX: ADDED ANIMATION FOR NEW ATTACKS --- */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.activity-item.new-attack {
+    animation: slideIn 0.5s ease-out forwards;
 }
 
 /* Input and Button Styles */
@@ -229,4 +244,50 @@ input:checked + .slider:before {
 
 .slider.round:before {
   border-radius: 50%;
+}
+
+/* --- Add this new code to the end of styles.css --- */
+
+/* Log Table Styling */
+.table-container {
+    margin-top: 20px;
+    max-height: 60vh; /* Set a max height for the table area */
+    overflow-y: auto; /* Add a scrollbar if content overflows */
+    border: 1px solid #00ff95;
+    border-radius: 5px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+thead {
+    background-color: rgba(15, 32, 53, 0.9);
+    position: sticky;
+    top: 0; /* Makes the header stick to the top when scrolling */
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #1d3d5f;
+    color: #e0e0e0;
+}
+
+th {
+    color: #00ff95;
+}
+
+tbody tr:nth-child(even) {
+    background-color: rgba(10, 25, 41, 0.7);
+}
+
+tbody tr:hover {
+    background-color: rgba(0, 255, 149, 0.1);
+}
+
+.pdf-button {
+    margin-bottom: 20px;
 }

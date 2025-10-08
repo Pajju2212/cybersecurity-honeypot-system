@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO
 from datetime import datetime, timedelta
 import random
@@ -6,74 +6,57 @@ import socket
 import struct
 from sqlalchemy import func
 import requests
+from collections import Counter
 
 # Local imports
 from extensions import db
 from models.attack_log import AttackLog
-from utils.email_alerts import mail, send_alert_email
+from utils.email_alerts import mail
 
 # --- App Configuration ---
 app = Flask(__name__)
 app.config.from_object('config.Config')
 db.init_app(app)
 mail.init_app(app)
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='threading')
 
 # --- Global Data ---
 geolocation_cache = {}
-alert_settings = {
-    'is_enabled': False, 'recipient_email': '', 'threshold_count': 20,
-    'threshold_minutes': 5, 'last_alert_time': None
-}
+common_usernames = ['admin', 'root', 'user', 'test', 'guest']
+common_passwords = ['password', '123456', 'admin', 'qwerty', '12345']
 
-# --- Background Task Functions ---
-def check_for_alerts():
-    # This function remains unchanged
-    with app.app_context():
-        if not all([alert_settings['is_enabled'], alert_settings['recipient_email']]): return
-        cooldown = timedelta(minutes=15)
-        if alert_settings['last_alert_time'] and (datetime.now() - alert_settings['last_alert_time'] < cooldown): return
-        time_thresh = datetime.now() - timedelta(minutes=alert_settings['threshold_minutes'])
-        count = AttackLog.query.filter(AttackLog.timestamp >= time_thresh).count()
-        if count >= alert_settings['threshold_count']:
-            subject = "Honeypot Security Alert: High Attack Volume"
-            body = f"Alert: {count} attacks detected, exceeding threshold of {alert_settings['threshold_count']}."
-            send_alert_email(subject, [alert_settings['recipient_email']], body)
-            alert_settings['last_alert_time'] = datetime.now()
-
+# --- Background Task ---
 def simulate_attack():
     with app.app_context():
         ip = generate_random_ip()
-        # "Brute Force" has been REMOVED from this list
-        attack_type = random.choice(['SQL Injection', 'XSS', 'DDoS', 'Phishing'])
-        new_log = AttackLog(timestamp=datetime.now(), ip_address=ip, attack_type=attack_type, details=f"Simulated {attack_type} attack.")
+        attack_type = random.choice(['SQL Injection', 'XSS', 'DDoS', 'Phishing', 'Brute Force'])
+        details = f"Simulated {attack_type} attack."
+        if attack_type == 'Brute Force':
+            username = random.choice(common_usernames)
+            password = random.choice(common_passwords)
+            details = f"Failed login attempt with username: '{username}' and password: '{password}'"
+        
+        new_log = AttackLog(timestamp=datetime.now(), ip_address=ip, attack_type=attack_type, details=details)
         db.session.add(new_log)
         db.session.commit()
+        
         socketio.emit('new_attack', {
             'timestamp': new_log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'ip_address': new_log.ip_address,
             'attack_type': new_log.attack_type
         })
+        print(f"Attack Logged: {attack_type} from {ip}")
 
 def background_task_runner(task_function, interval_seconds):
     while True:
         socketio.sleep(interval_seconds)
         task_function()
 
-# --- Main App Routes ---
+# --- Main Routes ---
 @app.route('/')
 def home():
     initial_activity = AttackLog.query.order_by(AttackLog.timestamp.desc()).limit(10).all()
     return render_template('index.html', recent_activity=initial_activity)
-
-# Login page functionality is now completely disabled.
-@app.route('/login')
-def login():
-    return "<h1>Login Honeypot is disabled.</h1>", 404
-
-@app.route('/log-failed-login', methods=['POST'])
-def log_failed_login():
-    return jsonify({'status': 'ignored'}), 200
 
 @app.route('/logs')
 def logs():
@@ -88,74 +71,64 @@ def analytics():
 def settings():
     return render_template('settings.html')
 
-# (All your other routes and API endpoints remain the same)
-@app.route('/get-alert-settings')
-def get_alert_settings():
-    settings_copy = alert_settings.copy()
-    if settings_copy['last_alert_time']: settings_copy['last_alert_time'] = settings_copy['last_alert_time'].isoformat()
-    return jsonify(settings_copy)
-
-@app.route('/save-alert-settings', methods=['POST'])
-def save_alert_settings():
-    data = request.get_json()
-    alert_settings['is_enabled'] = data.get('is_enabled', False)
-    alert_settings['recipient_email'] = data.get('recipient_email', '')
-    alert_settings['threshold_count'] = int(data.get('threshold_count', 20))
-    alert_settings['threshold_minutes'] = int(data.get('threshold_minutes', 5))
-    return jsonify({'status': 'success'})
-
-@app.route('/test-email')
-def test_email():
-    try:
-        subject = "Honeypot Test Email"
-        recipients = ["prajwalhpatil22@gmail.com"] # Replace with your test email
-        body = "This is a test email from your Honeypot application."
-        send_alert_email(subject, recipients, body)
-        return "Attempted to send test email. Check your terminal for success or error messages."
-    except Exception as e:
-        return f"An error occurred: {e}"
-
+# --- API Routes ---
 @app.route('/api/attack_frequency')
 def api_attack_frequency():
     labels = ["SQL Injection", "XSS", "Brute Force", "DDoS", "Phishing"]
     attack_counts = {label: 0 for label in labels}
-    attack_type_counts = db.session.query(AttackLog.attack_type, func.count(AttackLog.attack_type)).group_by(AttackLog.attack_type).all()
-    for attack_type, count in attack_type_counts:
-        if attack_type in attack_counts: attack_counts[attack_type] = count
+    try:
+        attack_type_counts = db.session.query(AttackLog.attack_type, func.count(AttackLog.attack_type)).group_by(AttackLog.attack_type).all()
+        for attack_type, count in attack_type_counts:
+            if attack_type in attack_counts:
+                attack_counts[attack_type] = count
+    except Exception as e:
+        print(f"Error fetching attack frequency: {e}")
     data = [attack_counts[label] for label in labels]
-    return jsonify({"labels": labels, "datasets": [{"data": data, "backgroundColor": ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]}]})
+    return jsonify({"labels": labels, "datasets": [{"data": data}]})
 
-@app.route('/api/attack_trend')
-def api_attack_trend():
-    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    attacks_per_month = {i: 0 for i in range(1, 13)}
-    current_year = datetime.now().year
-    monthly_counts = db.session.query(func.extract('month', AttackLog.timestamp), func.count(AttackLog.id)).filter(func.extract('year', AttackLog.timestamp) == current_year).group_by(func.extract('month', AttackLog.timestamp)).all()
-    for month, count in monthly_counts: attacks_per_month[int(month)] = count
-    data = [attacks_per_month[i] for i in range(1, 13)]
-    return jsonify({"labels": months, "datasets": [{"label": "Attacks Over Time", "data": data, "borderColor": "#00ff95", "backgroundColor": "rgba(0, 255, 149, 0.2)"}]})
+def _fetch_geo_data(ips_to_fetch):
+    if not ips_to_fetch:
+        return
+    try:
+        response = requests.post("http://ip-api.com/batch", json=ips_to_fetch, params={'fields': 'query,country,status'}, timeout=10)
+        response.raise_for_status()
+        for data in response.json():
+            if data.get('status') == 'success':
+                geolocation_cache[data.get('query')] = {'country': data.get('country')}
+    except requests.exceptions.RequestException as e:
+        print(f"Geolocation API failed: {e}")
+
+@app.route('/api/attacks_by_country')
+def api_attacks_by_country():
+    country_counts = Counter()
+    try:
+        all_attacks = AttackLog.query.all()
+        unique_ips = list(set([log.ip_address for log in all_attacks]))
+        
+        ips_to_fetch = [ip for ip in unique_ips if ip not in geolocation_cache]
+        if ips_to_fetch:
+            _fetch_geo_data(ips_to_fetch)
+
+        for attack in all_attacks:
+            geo_info = geolocation_cache.get(attack.ip_address)
+            if geo_info and geo_info.get('country'):
+                country_counts[geo_info['country']] += 1
+    except Exception as e:
+        print(f"Error fetching country data: {e}")
+
+    top_countries = country_counts.most_common(7)
+    labels = [country for country, count in top_countries]
+    data = [count for country, count in top_countries]
     
-@app.route('/api/attack_locations')
-def api_attack_locations():
-    attack_locations = []
-    recent_attacks = AttackLog.query.order_by(AttackLog.timestamp.desc()).limit(100).all()
-    unique_ips = list(set([log.ip_address for log in recent_attacks]))
-    ips_to_fetch = [ip for ip in unique_ips if ip not in geolocation_cache]
-    if ips_to_fetch:
-        try:
-            response = requests.post("http://ip-api.com/batch", json=ips_to_fetch, params={'fields': 'query,lat,lon,status'}, timeout=10)
-            response.raise_for_status()
-            for data in response.json():
-                if data.get('status') == 'success':
-                    geolocation_cache[data.get('query')] = {'lat': data.get('lat'), 'lon': data.get('lon')}
-        except requests.exceptions.RequestException as e:
-            print(f"Geolocation API failed: {e}")
-    for attack in recent_attacks:
-        geo_info = geolocation_cache.get(attack.ip_address)
-        if geo_info:
-            attack_locations.append({'lat': geo_info['lat'], 'lon': geo_info['lon'], 'type': attack.attack_type})
-    return jsonify(attack_locations)
+    if len(country_counts) > 7:
+        other_count = sum(country_counts.values()) - sum(data)
+        if other_count > 0:
+            labels.append('Other')
+            data.append(other_count)
 
+    return jsonify({"labels": labels, "datasets": [{"data": data}]})
+
+# --- Helper Function & Startup ---
 def generate_random_ip():
     if random.random() < 0.2: return "103.27.70.100"
     while True:
@@ -170,6 +143,4 @@ if __name__ == '__main__':
         db.create_all()
 
     socketio.start_background_task(target=background_task_runner, task_function=simulate_attack, interval_seconds=5)
-    socketio.start_background_task(target=background_task_runner, task_function=check_for_alerts, interval_seconds=60)
-    
     socketio.run(app, debug=True)

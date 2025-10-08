@@ -1,0 +1,15 @@
+# Virtual Environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Database file
+*.db
+
+# Log files
+*.log
+
+# PDF files
+*.pdf

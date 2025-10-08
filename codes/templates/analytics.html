@@ -1,56 +1,109 @@
 {% extends "layout.html" %}
 
 {% block title %}Analytics - The Honeypot{% endblock %}
-{% block page_title %}Analytics{% endblock %}
+{% block page_title %}Attack Analytics{% endblock %}
+
+{% block head %}
+    {{ super() }}
+    <style>
+        .chart-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+{% endblock %}
 
 {% block content %}
 <section id="main">
     <div class="container">
-        <h2>Attack Analytics</h2>
-        <canvas id="attackFrequencyChart" class="chart"></canvas>
-        <canvas id="attackTrendChart" class="chart"></canvas>
-        <div id="attackMap" class="chart"></div>
+        <div class="chart-container">
+            
+            <div>
+                <h3>Attack Frequency</h3>
+                <div class="chart-wrapper">
+                    <canvas id="attackFrequencyChart"></canvas>
+                </div>
+            </div>
+
+            <div>
+                <h3>Attacks by Country</h3>
+                <div class="chart-wrapper">
+                    <canvas id="attacksByCountryChart"></canvas>
+                </div>
+            </div>
+
+        </div>
     </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
+    {{ super() }}
+    
+    <script src="{{ url_for('static', filename='libs/chart.js') }}" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js'"></script>
+    
     <script>
-        async function fetchData(url) {
-            const response = await fetch(url);
-            return response.json();
-        }
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // 1. Attack Frequency Chart (Bar Chart)
+            fetch('/api/attack_frequency')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('attack_frequency data:', data);
+                    new Chart(document.getElementById('attackFrequencyChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.labels,
+                            datasets: [{
+                                data: data.datasets[0].data,
+                                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+                            }]
+                        },
+                        options: {
+                            plugins: { legend: { display: false } },
+                            scales: { 
+                                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' } },
+                                x: { grid: { color: 'rgba(255,255,255,0.1)' } } 
+                            },
+                            responsive: true, maintainAspectRatio: false
+                        }
+                    });
+                });
 
-        async function renderCharts() {
-            const frequencyData = await fetchData('/api/attack_frequency');
-            const trendData = await fetchData('/api/attack_trend');
-
-            const ctxFrequency = document.getElementById('attackFrequencyChart').getContext('2d');
-            new Chart(ctxFrequency, { type: 'bar', data: frequencyData, options: { scales: { y: { beginAtZero: true } } } });
-
-            const ctxTrend = document.getElementById('attackTrendChart').getContext('2d');
-            new Chart(ctxTrend, { type: 'line', data: trendData, options: { scales: { y: { beginAtZero: true } } } });
-        }
-        
-        async function renderMap() {
-            const map = L.map('attackMap').setView([20, 0], 2);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd', maxZoom: 19
-            }).addTo(map);
-
-            const attackData = await fetchData('/api/attack_locations');
-            attackData.forEach(attack => {
-                L.circle([attack.lat, attack.lon], {
-                    color: '#00ff95', fillColor: '#00ff95', fillOpacity: 0.5, radius: 20000
-                }).addTo(map)
-                  .bindPopup(`<b>Attack Detected!</b><br>IP: ${attack.ip}<br>Type: ${attack.type}<br>Time: ${attack.timestamp}`);
-            });
-        }
-
-        window.onload = function() {
-            renderCharts();
-            renderMap();
-        };
+            // 2. Attacks by Country Chart (Pie Chart)
+            fetch('/api/attacks_by_country')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('attacks_by_country data:', data);
+                    new Chart(document.getElementById('attacksByCountryChart'), {
+                        type: 'pie',
+                        data: {
+                            labels: data.labels,
+                            datasets: [{
+                                data: data.datasets[0].data,
+                                backgroundColor: [
+                                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                                    '#9966FF', '#FF9F40', '#C9CBCF'
+                                ],
+                                hoverOffset: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top' }
+                            }
+                        }
+                    });
+                });
+        });
     </script>
 {% endblock %}
